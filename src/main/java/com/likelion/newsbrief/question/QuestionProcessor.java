@@ -1,0 +1,68 @@
+package com.likelion.newsbrief.question;
+
+import com.likelion.newsbrief.news.AiClient;
+import com.likelion.newsbrief.news.NaverNewsSearch;
+import com.likelion.newsbrief.news.NewsArticle;
+import com.likelion.newsbrief.news.NewsArticleRepository;
+import com.likelion.newsbrief.news.Source;
+import com.likelion.newsbrief.question.Question.Status;
+import java.time.Instant;
+import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
+
+/** 질문 하나 처리: 관련 기사 찾기(DB → 네이버) → AI 답변 → 저장 */
+@Component
+class QuestionProcessor {
+
+  private static final int MAX_SOURCES = 8;
+
+  private static final Logger log = LoggerFactory.getLogger(QuestionProcessor.class);
+
+  private final QuestionRepository questions;
+  private final NewsArticleRepository articles;
+  private final NaverNewsSearch naver;
+  private final AiClient ai;
+
+  QuestionProcessor(
+      QuestionRepository questions,
+      NewsArticleRepository articles,
+      NaverNewsSearch naver,
+      AiClient ai) {
+    this.questions = questions;
+    this.articles = articles;
+    this.naver = naver;
+    this.ai = ai;
+  }
+
+  void process(long id) {
+    // 대기열에 같은 ID가 두 번 들어와도(재투입) 한 워커만 처리한다
+    if (questions.claim(id, Status.PENDING, Status.PROCESSING, Instant.now()) == 0) {
+      return;
+    }
+    try {
+      Question question = questions.findById(id).orElse(null);
+      if (question == null) {
+        return;
+      }
+      List<NewsArticle> found = articles.search(question.getQueryText(), MAX_SOURCES);
+      if (found.isEmpty()) {
+        found = naver.search(question.getQueryText(), MAX_SOURCES);
+      }
+      AiClient.Answer answer = ai.answer(question.getQueryText(), found);
+      List<Source> sources =
+          answer.rejected() ? List.of() : found.stream().map(Source::of).toList();
+      questions.finish(
+          id,
+          Status.PROCESSING,
+          answer.rejected() ? Status.REJECTED : Status.COMPLETED,
+          answer.text(),
+          sources,
+          Instant.now());
+    } catch (Exception e) {
+      log.error("질문 {} 처리 실패", id, e);
+      questions.finish(id, Status.PROCESSING, Status.FAILED, null, null, Instant.now());
+    }
+  }
+}

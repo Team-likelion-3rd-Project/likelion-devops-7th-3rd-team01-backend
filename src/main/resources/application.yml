@@ -1,0 +1,44 @@
+# 기본값은 로컬 개발용 (compose.yaml). 서버에서는 환경 변수로 덮어쓴다 (docs/env.md)
+spring:
+  application:
+    name: newsbrief
+  autoconfigure:
+    # 로그인은 JWT 쿠키로만 한다. 기본 계정·임시 비밀번호를 만들지 않게 끈다
+    exclude: org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration
+  datasource:
+    url: jdbc:mysql://localhost:3307/newsbrief
+    username: newsbrief
+    password: newsbrief
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate.jdbc.time_zone: UTC
+  data:
+    redis:
+      host: localhost
+      # Redis가 죽었을 때 요청이 오래 묶이지 않게 짧게 둔다 (장애 시나리오 B1)
+      connect-timeout: 1s
+      timeout: 3s
+
+# GET /actuator/info에 배포된 커밋을 보여 준다 (Dockerfile의 GIT_SHA)
+info:
+  commit: ${GIT_SHA:local}
+
+management:
+  info:
+    env:
+      enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      group:
+        # Redis는 넣지 않는다. Redis가 죽어도 DB로 서비스가 계속되어야 한다
+        readiness:
+          include: readinessState,db
