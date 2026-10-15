@@ -16,8 +16,7 @@ public enum Category {
       "https://rss.etnews.com/06.xml"),
   MOBILE_TELECOM("모바일/통신", "https://rss.etnews.com/03033.xml"),
   COMPUTER("컴퓨터", "https://rss.etnews.com/04043.xml"),
-  // 세부 '플랫폼' 피드(60028)는 갱신이 멈춰 있어 상위 '플랫폼/유통' 피드를 쓴다
-  INTERNET("인터넷", "https://rss.etnews.com/60.xml"),
+  SECURITY("보안", "https://rss.etnews.com/04045.xml"),
   // 세부 '과학' 피드(20020)는 갱신이 멈춰 있어 상위 '과학' 피드를 쓴다
   SCIENCE("과학", "https://rss.etnews.com/20.xml");
 
