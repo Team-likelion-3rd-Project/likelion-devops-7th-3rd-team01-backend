@@ -72,6 +72,8 @@ class NewsApiTests {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.categories.length()").value(6))
         .andExpect(jsonPath("$.categories[0].category").value("AI"))
+        .andExpect(jsonPath("$.categories[4].category").value("SECURITY"))
+        .andExpect(jsonPath("$.categories[4].categoryName").value("보안"))
         .andExpect(jsonPath("$.categories[?(@.category=='AI')].issues.length()").value(3))
         .andExpect(jsonPath("$.categories[?(@.category=='AI')].issues[0].title").value("이슈 1"))
         .andExpect(jsonPath("$.categories[?(@.category=='AI')].issues[0].summary").value("요약"));
@@ -103,8 +105,9 @@ class NewsApiTests {
     mvc.perform(get("/api/news/categories/POLITICS"))
         .andExpect(status().isNotFound())
         .andExpect(jsonPath("$.code").value("NOT_FOUND"));
-    // 분야 개편으로 뺀 게임도 404
+    // 분야 개편으로 뺀 게임·인터넷도 404
     mvc.perform(get("/api/news/categories/GAME")).andExpect(status().isNotFound());
+    mvc.perform(get("/api/news/categories/INTERNET")).andExpect(status().isNotFound());
   }
 
   /** 미래 시각으로 넣어 로컬 DB에 이미 있는 요약보다 최신이 되게 한다 */
