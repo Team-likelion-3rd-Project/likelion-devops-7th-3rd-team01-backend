@@ -14,7 +14,7 @@ public class SummaryBatch {
 
   static final int MAX_ISSUES = 5;
 
-  // 게임처럼 하루 기사가 적은 분야도 이슈가 채워지도록 48시간
+  // 하루 기사가 적은 분야도 이슈가 채워지도록 48시간
   private static final Duration ARTICLE_WINDOW = Duration.ofHours(48);
   private static final Duration RETENTION = Duration.ofDays(7);
 
@@ -83,6 +83,8 @@ public class SummaryBatch {
                       i + 1,
                       d.title(),
                       d.summary(),
+                      d.keyPoints(),
+                      d.glossary(),
                       d.sources().stream().map(Source::of).toList(),
                       ai.isMock());
                 })

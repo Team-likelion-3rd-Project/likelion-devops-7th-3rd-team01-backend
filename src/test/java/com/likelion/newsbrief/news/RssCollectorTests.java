@@ -29,7 +29,7 @@ class RssCollectorTests {
         """;
 
     List<NewsArticle> articles =
-        RssCollector.parse(xml.getBytes(StandardCharsets.UTF_8), Category.GAME);
+        RssCollector.parse(xml.getBytes(StandardCharsets.UTF_8), Category.AI);
 
     assertThat(articles).hasSize(2);
     NewsArticle first = articles.get(0);
@@ -50,8 +50,7 @@ class RssCollectorTests {
         <rss><channel><item><title>&x;</title><link>https://x.com</link></item></channel></rss>\
         """;
 
-    assertThatThrownBy(
-            () -> RssCollector.parse(xml.getBytes(StandardCharsets.UTF_8), Category.GAME))
+    assertThatThrownBy(() -> RssCollector.parse(xml.getBytes(StandardCharsets.UTF_8), Category.AI))
         .isInstanceOf(IllegalStateException.class);
   }
 

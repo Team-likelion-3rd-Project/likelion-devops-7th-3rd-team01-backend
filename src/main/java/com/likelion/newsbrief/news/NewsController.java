@@ -29,7 +29,7 @@ class NewsController {
   }
 
   // 응답은 Redis에 통째로 캐시하므로 Serializable
-  record HomeIssue(Long issueId, String title) implements Serializable {}
+  record HomeIssue(Long issueId, String title, String summary) implements Serializable {}
 
   record HomeCategory(Category category, String categoryName, List<HomeIssue> issues)
       implements Serializable {}
@@ -37,7 +37,14 @@ class NewsController {
   record HomeResponse(OffsetDateTime generatedAt, boolean mock, List<HomeCategory> categories)
       implements Serializable {}
 
-  record Issue(Long issueId, String title, String summary, List<Source> sources)
+  record Issue(
+      Long issueId,
+      String title,
+      String summary,
+      List<String> keyPoints,
+      List<NewsIssue.TimelineEntry> timeline,
+      List<NewsIssue.Term> glossary,
+      List<Source> sources)
       implements Serializable {}
 
   record CategoryResponse(
@@ -73,7 +80,7 @@ class NewsController {
                         c.displayName(),
                         byCategory.getOrDefault(c, List.of()).stream()
                             .limit(HOME_ISSUES)
-                            .map(i -> new HomeIssue(i.getIssueId(), i.getTitle()))
+                            .map(i -> new HomeIssue(i.getIssueId(), i.getTitle(), i.getSummary()))
                             .toList()))
             .toList();
     return new HomeResponse(oldestGeneratedAt(latest), anyMock(latest), categories);
@@ -89,6 +96,9 @@ class NewsController {
                         i.getIssueId(),
                         i.getTitle(),
                         i.getSummary(),
+                        i.getKeyPoints(),
+                        i.getTimeline(),
+                        i.getGlossary(),
                         i.getSources().stream().map(Source::inKst).toList()))
             .toList();
     return new CategoryResponse(
