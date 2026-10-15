@@ -7,7 +7,9 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.io.Serializable;
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
@@ -33,9 +35,38 @@ public class NewsIssue {
   private String summary;
 
   @JdbcTypeCode(SqlTypes.JSON)
+  private List<String> keyPoints;
+
+  @JdbcTypeCode(SqlTypes.JSON)
+  private List<TimelineEntry> timeline;
+
+  @JdbcTypeCode(SqlTypes.JSON)
+  private List<Term> glossary;
+
+  @JdbcTypeCode(SqlTypes.JSON)
   private List<Source> sources;
 
   private boolean mock;
+
+  /** 전개 흐름 한 줄. date는 YYYY-MM-DD (KST) */
+  public record TimelineEntry(String date, String text) implements Serializable {
+
+    /** 근거 기사의 발행일·제목으로 만든다 (오래된 순). AI가 기사에 없는 날짜·사건을 지어내지 않게 AI에게 맡기지 않는다. 발행일 없는 기사는 뺀다 */
+    static List<TimelineEntry> from(List<Source> sources) {
+      return sources.stream()
+          .filter(s -> s.publishedAt() != null)
+          .sorted(Comparator.comparing(Source::publishedAt))
+          .map(
+              s ->
+                  new TimelineEntry(
+                      s.publishedAt().atZoneSameInstant(Source.KST).toLocalDate().toString(),
+                      s.title()))
+          .toList();
+    }
+  }
+
+  /** 용어 풀이 */
+  public record Term(String term, String description) implements Serializable {}
 
   protected NewsIssue() {}
 
@@ -45,6 +76,8 @@ public class NewsIssue {
       int rankNo,
       String title,
       String summary,
+      List<String> keyPoints,
+      List<Term> glossary,
       List<Source> sources,
       boolean mock) {
     this.category = category;
@@ -52,6 +85,9 @@ public class NewsIssue {
     this.rankNo = rankNo;
     this.title = title;
     this.summary = summary;
+    this.keyPoints = keyPoints;
+    this.timeline = TimelineEntry.from(sources);
+    this.glossary = glossary;
     this.sources = sources;
     this.mock = mock;
   }
@@ -78,6 +114,18 @@ public class NewsIssue {
 
   public String getSummary() {
     return summary;
+  }
+
+  public List<String> getKeyPoints() {
+    return keyPoints;
+  }
+
+  public List<TimelineEntry> getTimeline() {
+    return timeline;
+  }
+
+  public List<Term> getGlossary() {
+    return glossary;
   }
 
   public List<Source> getSources() {

@@ -12,8 +12,16 @@ public class AiClient {
 
   private static final Set<String> MODES = Set.of("mock", "bedrock", "fail");
 
-  /** AI가 만든 이슈 하나 */
-  public record IssueDraft(String title, String summary, List<NewsArticle> sources) {}
+  /**
+   * AI가 만든 이슈 하나. summary는 한 줄 요약, keyPoints는 3개 정도. 전개 흐름(timeline)은 AI가 아니라 근거 기사로 만든다
+   * (NewsIssue.TimelineEntry)
+   */
+  public record IssueDraft(
+      String title,
+      String summary,
+      List<String> keyPoints,
+      List<NewsIssue.Term> glossary,
+      List<NewsArticle> sources) {}
 
   private final String mode;
 
@@ -33,11 +41,7 @@ public class AiClient {
   public List<IssueDraft> summarize(Category category, List<NewsArticle> articles, int max) {
     return switch (mode) {
       // 최신 기사 하나를 이슈 하나로 쓴다. 화면에는 "샘플 데이터" 띠가 뜬다
-      case "mock" ->
-          articles.stream()
-              .limit(max)
-              .map(a -> new IssueDraft(a.getTitle(), mockSummary(a), List.of(a)))
-              .toList();
+      case "mock" -> articles.stream().limit(max).map(AiClient::mockDraft).toList();
       case "fail" -> throw new IllegalStateException("AI_MODE=fail: 장애 시험용 실패");
       // ponytail: Bedrock 호출은 팀 AWS 계정의 모델 사용 가능 여부 확인 후 붙인다
       default -> throw new UnsupportedOperationException("아직 연결하지 않은 AI_MODE: " + mode);
@@ -69,9 +73,30 @@ public class AiClient {
   /** mock에서 거절 화면을 확인할 수 있게, 계획서의 거절 예시(코드 작성·번역·잡담)를 단어로 흉내 낸다 */
   private static final Pattern MOCK_REJECT = Pattern.compile("코드|번역|잡담");
 
-  private static String mockSummary(NewsArticle article) {
+  private static final Pattern SENTENCE_END = Pattern.compile("(?<=[.!?])\\s+");
+
+  /** 소개글 첫 문장을 한 줄 요약으로, 이어지는 문장(최대 3개)을 핵심 포인트로 쓴다. 용어 풀이는 화면 확인용 고정 예시 */
+  static IssueDraft mockDraft(NewsArticle article) {
     String description = article.getDescription() == null ? "" : article.getDescription();
-    return "[샘플 요약] "
-        + (description.length() > 200 ? description.substring(0, 200) + "…" : description);
+    List<String> sentences =
+        SENTENCE_END
+            .splitAsStream(description)
+            .map(String::strip)
+            .filter(s -> !s.isEmpty())
+            .toList();
+    String first = sentences.isEmpty() ? article.getTitle() : sentences.get(0);
+    // RSS 소개글은 중간에서 잘려 있어 마지막 문장이 끊긴 경우가 많다. 문장 부호로 끝나는 문장만 쓴다
+    List<String> rest =
+        sentences.stream().skip(1).filter(s -> s.matches(".*[.!?]$")).limit(3).toList();
+    return new IssueDraft(
+        article.getTitle(),
+        "[샘플] " + truncate(first, 100),
+        (rest.isEmpty() ? List.of(first) : rest).stream().map(s -> truncate(s, 100)).toList(),
+        List.of(new NewsIssue.Term("[샘플] 용어", "실제 AI를 연결하면 기사에 나온 어려운 용어를 풀어 줍니다.")),
+        List.of(article));
+  }
+
+  private static String truncate(String s, int max) {
+    return s.length() <= max ? s : s.substring(0, max) + "…";
   }
 }

@@ -23,7 +23,7 @@ public class NewsCache {
   static final Duration TTL = Duration.ofMinutes(30);
 
   // 응답 모양이 바뀌면 v2로 올려 옛 캐시를 무시한다
-  private static final String PREFIX = "news:v1:";
+  private static final String PREFIX = "news:v2:";
 
   private static final Logger log = LoggerFactory.getLogger(NewsCache.class);
 

@@ -38,7 +38,11 @@ class SecurityConfig {
         .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
         .authorizeHttpRequests(
             auth ->
-                auth.requestMatchers("/api/auth/me", "/api/questions/**", "/api/mypage/**")
+                auth.requestMatchers(
+                        "/api/auth/me",
+                        "/api/questions/**",
+                        "/api/saved-articles/**",
+                        "/api/mypage/**")
                     .authenticated()
                     .anyRequest()
                     .permitAll())
