@@ -23,10 +23,7 @@ class QuestionProcessor {
   private final NewsArticleRepository articles;
   private final AiClient ai;
 
-  QuestionProcessor(
-      QuestionRepository questions,
-      NewsArticleRepository articles,
-      AiClient ai) {
+  QuestionProcessor(QuestionRepository questions, NewsArticleRepository articles, AiClient ai) {
     this.questions = questions;
     this.articles = articles;
     this.ai = ai;
@@ -44,8 +41,8 @@ class QuestionProcessor {
       }
       List<NewsArticle> found = articles.search(question.getQueryText(), MAX_SOURCES);
       AiClient.Answer answer = ai.answer(question.getQueryText(), found);
-      List<Source> sources =
-          answer.rejected() ? List.of() : found.stream().map(Source::of).toList();
+      // 답에 실제로 쓴 기사만 근거로 보여 준다 (거절이면 빈 목록)
+      List<Source> sources = answer.sources().stream().map(Source::of).toList();
       questions.finish(
           id,
           Status.PROCESSING,
