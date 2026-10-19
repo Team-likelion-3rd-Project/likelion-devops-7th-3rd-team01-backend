@@ -1,4 +1,6 @@
-# 기본값은 로컬 개발용 (compose.yaml). 서버에서는 환경 변수로 덮어쓴다 (docs/env.md)
+# 설정은 환경 변수로 넣는다 (docs/env.md). DB·Redis 주소는 코드에 기본값을 두지 않는다:
+# 빠뜨리면 엉뚱한 곳(localhost)에 붙지 않고 시작할 때 바로 실패한다.
+# 로컬: docker compose(--profile app)가 넣어 준다. 테스트: src/test/resources/config/application.yml
 spring:
   application:
     name: newsbrief
@@ -6,9 +8,9 @@ spring:
     # 로그인은 JWT 쿠키로만 한다. 기본 계정·임시 비밀번호를 만들지 않게 끈다
     exclude: org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration
   datasource:
-    url: jdbc:mysql://localhost:3307/newsbrief
-    username: newsbrief
-    password: newsbrief
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
   jpa:
     open-in-view: false
     hibernate:
@@ -17,7 +19,7 @@ spring:
       hibernate.jdbc.time_zone: UTC
   data:
     redis:
-      host: localhost
+      host: ${SPRING_DATA_REDIS_HOST}
       # Redis가 죽었을 때 요청이 오래 묶이지 않게 짧게 둔다 (장애 시나리오 B1)
       connect-timeout: 1s
       timeout: 3s

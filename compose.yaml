@@ -30,6 +30,8 @@ services:
     build: .
     environment: &app-env
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/newsbrief
+      SPRING_DATASOURCE_USERNAME: newsbrief
+      SPRING_DATASOURCE_PASSWORD: newsbrief  # 로컬 전용 값
       SPRING_DATA_REDIS_HOST: redis
       COOKIE_SECURE: "false"  # http로 접속하므로
       JWT_SECRET: ${JWT_SECRET:-}  # 비우면 재시작할 때마다 로그인이 풀린다

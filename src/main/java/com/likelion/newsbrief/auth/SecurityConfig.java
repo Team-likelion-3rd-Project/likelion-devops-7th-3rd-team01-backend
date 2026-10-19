@@ -81,6 +81,10 @@ class SecurityConfig {
   @Bean
   CorsConfigurationSource corsConfigurationSource(
       @Value("${cors.allowed-origins:}") List<String> origins) {
+    // 쿠키를 함께 보내므로 화면 주소만 정확히 허용한다. *로 열면 어느 사이트에서나 로그인 상태로 API를 부를 수 있다
+    if (origins.stream().anyMatch(o -> o.contains("*"))) {
+      throw new IllegalStateException("CORS_ALLOWED_ORIGINS에 *를 쓸 수 없습니다: " + origins);
+    }
     CorsConfiguration config = new CorsConfiguration();
     config.setAllowedOrigins(origins);
     config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE"));
