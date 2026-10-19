@@ -1,7 +1,6 @@
 package com.likelion.newsbrief.question;
 
 import com.likelion.newsbrief.news.AiClient;
-import com.likelion.newsbrief.news.NaverNewsSearch;
 import com.likelion.newsbrief.news.NewsArticle;
 import com.likelion.newsbrief.news.NewsArticleRepository;
 import com.likelion.newsbrief.news.Source;
@@ -12,7 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-/** 질문 하나 처리: 관련 기사 찾기(DB → 네이버) → AI 답변 → 저장 */
+/** 질문 하나 처리: 수집한 기사에서 관련 기사 찾기 → AI 답변 → 저장. 외부 검색 API는 쓰지 않는다 (범위 경계) */
 @Component
 class QuestionProcessor {
 
@@ -22,17 +21,11 @@ class QuestionProcessor {
 
   private final QuestionRepository questions;
   private final NewsArticleRepository articles;
-  private final NaverNewsSearch naver;
   private final AiClient ai;
 
-  QuestionProcessor(
-      QuestionRepository questions,
-      NewsArticleRepository articles,
-      NaverNewsSearch naver,
-      AiClient ai) {
+  QuestionProcessor(QuestionRepository questions, NewsArticleRepository articles, AiClient ai) {
     this.questions = questions;
     this.articles = articles;
-    this.naver = naver;
     this.ai = ai;
   }
 
@@ -47,12 +40,9 @@ class QuestionProcessor {
         return;
       }
       List<NewsArticle> found = articles.search(question.getQueryText(), MAX_SOURCES);
-      if (found.isEmpty()) {
-        found = naver.search(question.getQueryText(), MAX_SOURCES);
-      }
       AiClient.Answer answer = ai.answer(question.getQueryText(), found);
-      List<Source> sources =
-          answer.rejected() ? List.of() : found.stream().map(Source::of).toList();
+      // 답에 실제로 쓴 기사만 근거로 보여 준다 (거절이면 빈 목록)
+      List<Source> sources = answer.sources().stream().map(Source::of).toList();
       questions.finish(
           id,
           Status.PROCESSING,
