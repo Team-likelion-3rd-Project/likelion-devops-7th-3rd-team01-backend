@@ -31,6 +31,7 @@ import tools.jackson.databind.json.JsonMapper;
 public class AiClient {
 
   private static final Set<String> MODES = Set.of("mock", "bedrock", "fail");
+  static final String REJECT_TEXT = "뉴스와 관련된 질문에만 답할 수 있어요.";
 
   private static final Logger log = LoggerFactory.getLogger(AiClient.class);
 
@@ -101,7 +102,7 @@ public class AiClient {
   public Answer answer(String query, List<NewsArticle> articles) {
     if ("mock".equals(mode) && MOCK_REJECT.matcher(query).find()) {
       mockWait();
-      return new Answer(true, "뉴스와 관련된 질문에만 답할 수 있어요.", List.of());
+      return new Answer(true, REJECT_TEXT, List.of());
     }
     if (articles.isEmpty()) {
       return new Answer(false, "관련 기사를 찾지 못했어요. 다른 표현으로 다시 질문해 주세요.", List.of());
@@ -170,6 +171,10 @@ public class AiClient {
   private Answer bedrockAnswer(String query, List<NewsArticle> articles) {
     String user = "질문: %s\n\n기사 목록\n%s".formatted(query, numbered(articles));
     AnswerOut out = parse(converse(ANSWER_PROMPT, user, 800), AnswerOut.class);
+    // 거절할 때 모델이 answer를 비우는 경우가 있다 (Playground 시험에서 확인). 거절은 정상 결과라 안내 문구를 채운다
+    if (out.rejected() && (out.answer() == null || out.answer().isBlank())) {
+      return new Answer(true, REJECT_TEXT, List.of());
+    }
     if (out.answer() == null || out.answer().isBlank()) {
       throw new IllegalStateException("AI 답변이 비어 있습니다");
     }

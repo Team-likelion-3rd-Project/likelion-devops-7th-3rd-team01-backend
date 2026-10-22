@@ -108,6 +108,22 @@ class AiClientBedrockTests {
   }
 
   @Test
+  void rejectedWithEmptyAnswerIsStillRejected() {
+    // Nova 2 Lite Playground 시험 3("오늘 서울 날씨 어때?")에서 실제로 받은 응답. 실패(FAILED)가 아니라 거절이어야 한다
+    Stub stub =
+        new Stub(
+            """
+            {"rejected":true,"answer":"","sources":[]}\
+            """);
+
+    AiClient.Answer answer = new AiClient("bedrock", MODEL, stub).answer("오늘 서울 날씨 어때?", articles);
+
+    assertThat(answer.rejected()).isTrue();
+    assertThat(answer.text()).isEqualTo(AiClient.REJECT_TEXT);
+    assertThat(answer.sources()).isEmpty();
+  }
+
+  @Test
   void noArticlesMeansNoAiCall() {
     Stub stub = new Stub("호출되면 안 됨");
 
