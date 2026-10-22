@@ -33,6 +33,9 @@ public class AiClient {
   private static final Set<String> MODES = Set.of("mock", "bedrock", "fail");
   static final String REJECT_TEXT = "뉴스와 관련된 질문에만 답할 수 있어요.";
 
+  // ponytail: 1세대 Nova Lite. M4-9 비교에서 Claude Haiku 5.5를 제안했다 — 모델 확정·ID 확인 후 바꾼다
+  static final String DEFAULT_MODEL_ID = "apac.amazon.nova-lite-v1:0";
+
   private static final Logger log = LoggerFactory.getLogger(AiClient.class);
 
   /**
@@ -60,7 +63,7 @@ public class AiClient {
   @Autowired
   AiClient(
       @Value("${ai.mode:mock}") String mode,
-      @Value("${bedrock.model-id:apac.amazon.nova-lite-v1:0}") String modelId,
+      @Value("${bedrock.model-id:}") String modelId,
       ObjectProvider<BedrockRuntimeClient> bedrock) {
     this(mode, modelId, bedrock.getIfAvailable());
   }
@@ -74,7 +77,8 @@ public class AiClient {
       throw new IllegalStateException("AI_MODE=bedrock인데 Bedrock 클라이언트가 없습니다 (BedrockConfig)");
     }
     this.mode = mode;
-    this.modelId = modelId;
+    // compose는 값이 없으면 빈 문자열로 넘긴다. 비어 있으면 기본 모델
+    this.modelId = modelId == null || modelId.isBlank() ? DEFAULT_MODEL_ID : modelId;
     this.bedrock = bedrock;
   }
 

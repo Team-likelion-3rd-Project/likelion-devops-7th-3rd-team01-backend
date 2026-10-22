@@ -37,6 +37,11 @@ services:
       JWT_SECRET: ${JWT_SECRET:-}  # 비우면 재시작할 때마다 로그인이 풀린다
       AI_MODE: ${AI_MODE:-mock}
       AI_MOCK_DELAY: ${AI_MOCK_DELAY:-0s}  # mock 응답 지연 (예: 3s)
+      # AI_MODE=bedrock일 때만 쓴다. 키는 .env에만 둔다 (커밋 금지)
+      AWS_REGION: ${AWS_REGION:-ap-northeast-2}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      BEDROCK_MODEL_ID: ${BEDROCK_MODEL_ID:-}
     ports:
       - "8080:8080"
     depends_on:
