@@ -18,7 +18,7 @@ import software.amazon.awssdk.services.bedrockruntime.model.Message;
 /** 실제 AWS 대신 정해 둔 응답을 돌려주는 가짜(stub) Bedrock으로 bedrock 모드를 검증한다 */
 class AiClientBedrockTests {
 
-  private static final String MODEL = "apac.amazon.nova-lite-v1:0";
+  private static final String MODEL = AiClient.DEFAULT_MODEL_ID;
 
   private final List<NewsArticle> articles =
       List.of(
@@ -60,6 +60,9 @@ class AiClientBedrockTests {
 
     ConverseRequest request = stub.requests.get(0);
     assertThat(request.modelId()).isEqualTo(MODEL);
+    // Claude Haiku 5.5는 기본값이 아닌 온도를 거부하므로 보내지 않는다. 생각 토큰까지 담도록 출력 상한은 넉넉히
+    assertThat(request.inferenceConfig().temperature()).isNull();
+    assertThat(request.inferenceConfig().maxTokens()).isEqualTo(8000);
     assertThat(request.system().get(0).text()).contains("기사 목록만 근거로");
     String user = request.messages().get(0).content().get(0).text();
     assertThat(user).contains("분야: AI", "이슈 최대 개수: 5", "[1] (", "[3] (");
@@ -104,6 +107,22 @@ class AiClientBedrockTests {
     AiClient.Answer answer = new AiClient("bedrock", MODEL, stub).answer("이 문장 영어로 바꿔줘", articles);
 
     assertThat(answer.rejected()).isTrue();
+    assertThat(answer.sources()).isEmpty();
+  }
+
+  @Test
+  void rejectedWithEmptyAnswerIsStillRejected() {
+    // Nova 2 Lite Playground 시험 3("오늘 서울 날씨 어때?")에서 실제로 받은 응답. 실패(FAILED)가 아니라 거절이어야 한다
+    Stub stub =
+        new Stub(
+            """
+            {"rejected":true,"answer":"","sources":[]}\
+            """);
+
+    AiClient.Answer answer = new AiClient("bedrock", MODEL, stub).answer("오늘 서울 날씨 어때?", articles);
+
+    assertThat(answer.rejected()).isTrue();
+    assertThat(answer.text()).isEqualTo(AiClient.REJECT_TEXT);
     assertThat(answer.sources()).isEmpty();
   }
 

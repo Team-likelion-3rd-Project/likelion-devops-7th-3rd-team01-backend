@@ -31,6 +31,10 @@ import tools.jackson.databind.json.JsonMapper;
 public class AiClient {
 
   private static final Set<String> MODES = Set.of("mock", "bedrock", "fail");
+  static final String REJECT_TEXT = "뉴스와 관련된 질문에만 답할 수 있어요.";
+
+  // M4-9 비교 시험(위키 "Bedrock 모델 시험 기록")에서 고른 모델의 Global 추론 프로파일
+  static final String DEFAULT_MODEL_ID = "global.anthropic.claude-haiku-5-5";
 
   private static final Logger log = LoggerFactory.getLogger(AiClient.class);
 
@@ -59,7 +63,7 @@ public class AiClient {
   @Autowired
   AiClient(
       @Value("${ai.mode:mock}") String mode,
-      @Value("${bedrock.model-id:apac.amazon.nova-lite-v1:0}") String modelId,
+      @Value("${bedrock.model-id:}") String modelId,
       ObjectProvider<BedrockRuntimeClient> bedrock) {
     this(mode, modelId, bedrock.getIfAvailable());
   }
@@ -73,7 +77,8 @@ public class AiClient {
       throw new IllegalStateException("AI_MODE=bedrock인데 Bedrock 클라이언트가 없습니다 (BedrockConfig)");
     }
     this.mode = mode;
-    this.modelId = modelId;
+    // compose는 값이 없으면 빈 문자열로 넘긴다. 비어 있으면 기본 모델
+    this.modelId = modelId == null || modelId.isBlank() ? DEFAULT_MODEL_ID : modelId;
     this.bedrock = bedrock;
   }
 
@@ -101,7 +106,7 @@ public class AiClient {
   public Answer answer(String query, List<NewsArticle> articles) {
     if ("mock".equals(mode) && MOCK_REJECT.matcher(query).find()) {
       mockWait();
-      return new Answer(true, "뉴스와 관련된 질문에만 답할 수 있어요.", List.of());
+      return new Answer(true, REJECT_TEXT, List.of());
     }
     if (articles.isEmpty()) {
       return new Answer(false, "관련 기사를 찾지 못했어요. 다른 표현으로 다시 질문해 주세요.", List.of());
@@ -126,6 +131,11 @@ public class AiClient {
   private static final String SUMMARY_PROMPT = prompt("prompts/summary.txt");
   private static final String ANSWER_PROMPT = prompt("prompts/answer.txt");
 
+  // 출력 상한에는 모델이 답하기 전에 생각하는 토큰도 들어간다. 낮으면 생각만 하다 빈 응답이 된다.
+  // Claude Haiku 5.5 실측 (10/22 Playground): 요약(기사 8개) 출력 3,035, 질문 답변 608. 앱은 요약에 기사 최대 30개를 보낸다
+  private static final int SUMMARY_MAX_TOKENS = 8000;
+  private static final int ANSWER_MAX_TOKENS = 2000;
+
   // 모델이 모르는 필드를 덧붙여도 실패하지 않게 한다
   private static final JsonMapper JSON =
       JsonMapper.builder().disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES).build();
@@ -148,7 +158,7 @@ public class AiClient {
     String user =
         "분야: %s\n이슈 최대 개수: %d\n\n기사 목록\n%s"
             .formatted(category.displayName(), max, numbered(articles));
-    SummaryOut out = parse(converse(SUMMARY_PROMPT, user, 2000), SummaryOut.class);
+    SummaryOut out = parse(converse(SUMMARY_PROMPT, user, SUMMARY_MAX_TOKENS), SummaryOut.class);
     if (out.issues() == null) {
       return List.of();
     }
@@ -169,7 +179,11 @@ public class AiClient {
 
   private Answer bedrockAnswer(String query, List<NewsArticle> articles) {
     String user = "질문: %s\n\n기사 목록\n%s".formatted(query, numbered(articles));
-    AnswerOut out = parse(converse(ANSWER_PROMPT, user, 800), AnswerOut.class);
+    AnswerOut out = parse(converse(ANSWER_PROMPT, user, ANSWER_MAX_TOKENS), AnswerOut.class);
+    // 거절할 때 모델이 answer를 비우는 경우가 있다 (Playground 시험에서 확인). 거절은 정상 결과라 안내 문구를 채운다
+    if (out.rejected() && (out.answer() == null || out.answer().isBlank())) {
+      return new Answer(true, REJECT_TEXT, List.of());
+    }
     if (out.answer() == null || out.answer().isBlank()) {
       throw new IllegalStateException("AI 답변이 비어 있습니다");
     }
@@ -215,11 +229,9 @@ public class AiClient {
                             .role(ConversationRole.USER)
                             .content(ContentBlock.fromText(user))
                             .build())
+                    // 온도는 보내지 않는다: Claude Haiku 5.5는 기본값이 아닌 온도를 거부한다 (Playground 시험 10/22)
                     .inferenceConfig(
-                        InferenceConfiguration.builder()
-                            .maxTokens(maxTokens)
-                            .temperature(0.2f)
-                            .build()));
+                        InferenceConfiguration.builder().maxTokens(maxTokens).build()));
     // 비용 추적용 (CL 토큰 추정과 비교)
     if (response.usage() != null) {
       log.info(

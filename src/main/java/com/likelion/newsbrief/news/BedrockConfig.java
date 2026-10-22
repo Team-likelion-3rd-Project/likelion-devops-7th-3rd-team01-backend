@@ -20,8 +20,9 @@ class BedrockConfig {
   BedrockRuntimeClient bedrockRuntimeClient(@Value("${aws.region:ap-northeast-2}") String region) {
     return BedrockRuntimeClient.builder()
         .region(Region.of(region))
-        // 질문은 60초 안에 끝나야 한다 (QuestionSweeper). SDK 재시도까지 포함한 한 번의 호출 제한
-        .overrideConfiguration(o -> o.apiCallTimeout(Duration.ofSeconds(40)))
+        // SDK 재시도까지 포함한 한 번의 호출 제한. 요약은 기사 30개를 보내 오래 걸릴 수 있다 (기사 8개에 12초).
+        // 질문은 이보다 먼저 60초가 지나면 QuestionSweeper가 FAILED로 바꾼다
+        .overrideConfiguration(o -> o.apiCallTimeout(Duration.ofSeconds(90)))
         .build();
   }
 }
