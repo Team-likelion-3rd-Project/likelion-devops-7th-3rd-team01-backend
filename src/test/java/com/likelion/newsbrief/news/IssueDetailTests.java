@@ -77,6 +77,20 @@ class IssueDetailTests {
     assertThat(Duration.ofNanos(System.nanoTime() - start)).isLessThan(Duration.ofMillis(300));
   }
 
+  @Test
+  void mockAnswerUsesTopThreeSources() {
+    AiClient ai = new AiClient("mock", "model", (BedrockRuntimeClient) null);
+    List<NewsArticle> found =
+        java.util.stream.IntStream.rangeClosed(1, 15)
+            .mapToObj(
+                i ->
+                    new NewsArticle(
+                        Category.AI, "기사 " + i, "소개.", "전자신문", "https://x.com/" + i, null))
+            .toList();
+
+    assertThat(ai.answer("AI 소식", found).sources()).containsExactlyElementsOf(found.subList(0, 3));
+  }
+
   private static Source source(String title, OffsetDateTime publishedAt) {
     return new Source("전자신문", title, "https://x.com/" + title.hashCode(), publishedAt);
   }

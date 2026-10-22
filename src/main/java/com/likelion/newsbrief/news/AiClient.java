@@ -113,7 +113,8 @@ public class AiClient {
             false,
             "[샘플 답변] '%s'와 관련된 기사 %d건을 찾았어요. 가장 관련 있는 기사는 「%s」예요."
                 .formatted(query, articles.size(), articles.get(0).getTitle()),
-            articles);
+            // 실제 AI처럼 후보 중 일부만 근거로 쓴다 (관련도 높은 순 상위 3개)
+            articles.subList(0, Math.min(MOCK_SOURCES, articles.size())));
       }
       case "fail" -> throw new IllegalStateException("AI_MODE=fail: 장애 시험용 실패");
       default -> bedrockAnswer(query, articles);
@@ -269,6 +270,8 @@ public class AiClient {
 
   /** mock에서 거절 화면을 확인할 수 있게, 계획서의 거절 예시(코드 작성·번역·잡담)를 단어로 흉내 낸다 */
   private static final Pattern MOCK_REJECT = Pattern.compile("코드|번역|잡담");
+
+  private static final int MOCK_SOURCES = 3;
 
   private static final Pattern SENTENCE_END = Pattern.compile("(?<=[.!?])\\s+");
 

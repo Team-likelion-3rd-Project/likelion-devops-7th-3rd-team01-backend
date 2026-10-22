@@ -15,7 +15,11 @@ import org.springframework.stereotype.Component;
 @Component
 class QuestionProcessor {
 
-  private static final int MAX_SOURCES = 8;
+  // 검색 정확도 측정(perf/search, docs/search-eval.md)으로 정한 값.
+  // 후보는 넉넉히 15개: 8개면 다른 표현으로 물은 질문의 정답을 놓쳤다 (11위).
+  // 최소 점수 3: 글자 한두 개만 우연히 겹친 후보를 버린다. 맞는 기사가 3.1점으로 걸린 경우가 있어 더 올리지 않는다
+  private static final int CANDIDATES = 15;
+  private static final double MIN_SCORE = 3.0;
 
   private static final Logger log = LoggerFactory.getLogger(QuestionProcessor.class);
 
@@ -39,7 +43,7 @@ class QuestionProcessor {
       if (question == null) {
         return;
       }
-      List<NewsArticle> found = articles.search(question.getQueryText(), MAX_SOURCES);
+      List<NewsArticle> found = articles.search(question.getQueryText(), MIN_SCORE, CANDIDATES);
       AiClient.Answer answer = ai.answer(question.getQueryText(), found);
       // 답에 실제로 쓴 기사만 근거로 보여 준다 (거절이면 빈 목록)
       List<Source> sources = answer.sources().stream().map(Source::of).toList();
