@@ -60,6 +60,9 @@ class AiClientBedrockTests {
 
     ConverseRequest request = stub.requests.get(0);
     assertThat(request.modelId()).isEqualTo(MODEL);
+    // Claude Haiku 5.5는 기본값이 아닌 온도를 거부하므로 보내지 않는다. 생각 토큰까지 담도록 출력 상한은 넉넉히
+    assertThat(request.inferenceConfig().temperature()).isNull();
+    assertThat(request.inferenceConfig().maxTokens()).isEqualTo(8000);
     assertThat(request.system().get(0).text()).contains("기사 목록만 근거로");
     String user = request.messages().get(0).content().get(0).text();
     assertThat(user).contains("분야: AI", "이슈 최대 개수: 5", "[1] (", "[3] (");
