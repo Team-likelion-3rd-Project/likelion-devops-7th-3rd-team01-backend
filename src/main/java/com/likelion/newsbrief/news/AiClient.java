@@ -3,6 +3,7 @@ package com.likelion.newsbrief.news;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Set;
@@ -48,6 +49,13 @@ public class AiClient {
   private final String modelId;
   private final BedrockRuntimeClient bedrock;
 
+  /**
+   * mock이 실제 AI처럼 응답을 늦추는 시간 (AI_MOCK_DELAY, 예: 3s). 부하 테스트에서 실제 AI 응답 시간을 흉내 내고(M4-9 측정값), 타임아웃보다
+   * 길게 주면 장애 시나리오 B4를 시험한다. 기본 0
+   */
+  @Value("${ai.mock-delay:0s}")
+  Duration mockDelay = Duration.ZERO;
+
   @Autowired
   AiClient(
       @Value("${ai.mode:mock}") String mode,
@@ -77,7 +85,10 @@ public class AiClient {
   public List<IssueDraft> summarize(Category category, List<NewsArticle> articles, int max) {
     return switch (mode) {
       // 최신 기사 하나를 이슈 하나로 쓴다. 화면에는 "샘플 데이터" 띠가 뜬다
-      case "mock" -> articles.stream().limit(max).map(AiClient::mockDraft).toList();
+      case "mock" -> {
+        mockWait();
+        yield articles.stream().limit(max).map(AiClient::mockDraft).toList();
+      }
       case "fail" -> throw new IllegalStateException("AI_MODE=fail: 장애 시험용 실패");
       default -> bedrockSummarize(category, articles, max);
     };
@@ -89,18 +100,22 @@ public class AiClient {
   /** 주어진 기사만 근거로 답한다. 관련 기사가 없으면 AI를 부르지 않고 "찾지 못했다"고 답한다 */
   public Answer answer(String query, List<NewsArticle> articles) {
     if ("mock".equals(mode) && MOCK_REJECT.matcher(query).find()) {
+      mockWait();
       return new Answer(true, "뉴스와 관련된 질문에만 답할 수 있어요.", List.of());
     }
     if (articles.isEmpty()) {
       return new Answer(false, "관련 기사를 찾지 못했어요. 다른 표현으로 다시 질문해 주세요.", List.of());
     }
     return switch (mode) {
-      case "mock" ->
-          new Answer(
-              false,
-              "[샘플 답변] '%s'와 관련된 기사 %d건을 찾았어요. 가장 관련 있는 기사는 「%s」예요."
-                  .formatted(query, articles.size(), articles.get(0).getTitle()),
-              articles);
+      case "mock" -> {
+        mockWait();
+        yield new Answer(
+            false,
+            "[샘플 답변] '%s'와 관련된 기사 %d건을 찾았어요. 가장 관련 있는 기사는 「%s」예요."
+                .formatted(query, articles.size(), articles.get(0).getTitle()),
+            // 실제 AI처럼 후보 중 일부만 근거로 쓴다 (관련도 높은 순 상위 3개)
+            articles.subList(0, Math.min(MOCK_SOURCES, articles.size())));
+      }
       case "fail" -> throw new IllegalStateException("AI_MODE=fail: 장애 시험용 실패");
       default -> bedrockAnswer(query, articles);
     };
@@ -242,8 +257,21 @@ public class AiClient {
 
   // ===== mock =====
 
+  private void mockWait() {
+    if (mockDelay.isZero()) {
+      return;
+    }
+    try {
+      Thread.sleep(mockDelay);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+    }
+  }
+
   /** mock에서 거절 화면을 확인할 수 있게, 계획서의 거절 예시(코드 작성·번역·잡담)를 단어로 흉내 낸다 */
   private static final Pattern MOCK_REJECT = Pattern.compile("코드|번역|잡담");
+
+  private static final int MOCK_SOURCES = 3;
 
   private static final Pattern SENTENCE_END = Pattern.compile("(?<=[.!?])\\s+");
 

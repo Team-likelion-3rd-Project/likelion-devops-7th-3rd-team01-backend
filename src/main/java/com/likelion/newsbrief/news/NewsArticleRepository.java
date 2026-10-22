@@ -17,16 +17,20 @@ public interface NewsArticleRepository extends JpaRepository<NewsArticle, Long> 
   List<NewsArticle> findTop30ByCategoryAndPublishedAtAfterOrderByPublishedAtDesc(
       Category category, Instant after);
 
-  /** 질문과 관련된 기사. FULLTEXT ngram 인덱스로 관련도 높은 순 */
+  /**
+   * 질문과 관련된 기사 후보. FULLTEXT ngram 인덱스의 관련도 점수가 minScore 이상인 것만, 높은 순으로 limit개. 최종 근거는 AI가 이 중에서 고른다
+   * (AiClient)
+   */
   @Query(
       value =
           """
           select * from news_articles
-          where match(title, description) against (:query in natural language mode)
+          where match(title, description) against (:query in natural language mode) >= :minScore
+          order by match(title, description) against (:query in natural language mode) desc
           limit :limit\
           """,
       nativeQuery = true)
-  List<NewsArticle> search(String query, int limit);
+  List<NewsArticle> search(String query, double minScore, int limit);
 
   @Transactional
   @Modifying
