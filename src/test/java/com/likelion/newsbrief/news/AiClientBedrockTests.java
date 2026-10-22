@@ -18,7 +18,7 @@ import software.amazon.awssdk.services.bedrockruntime.model.Message;
 /** 실제 AWS 대신 정해 둔 응답을 돌려주는 가짜(stub) Bedrock으로 bedrock 모드를 검증한다 */
 class AiClientBedrockTests {
 
-  private static final String MODEL = "apac.amazon.nova-lite-v1:0";
+  private static final String MODEL = AiClient.DEFAULT_MODEL_ID;
 
   private final List<NewsArticle> articles =
       List.of(
