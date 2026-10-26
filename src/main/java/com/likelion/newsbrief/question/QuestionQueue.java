@@ -29,6 +29,16 @@ class QuestionQueue {
     }
   }
 
+  /** 지표용. Redis가 죽어 있으면 NaN (Prometheus에 값 없음으로 보인다) */
+  double size() {
+    try {
+      Long size = redis.opsForList().size(KEY);
+      return size == null ? Double.NaN : size;
+    } catch (Exception e) {
+      return Double.NaN;
+    }
+  }
+
   /** 최대 timeout 동안 기다린다. 비어 있으면 null */
   Long pop(Duration timeout) {
     String value = redis.opsForList().rightPop(KEY, timeout);

@@ -32,6 +32,8 @@ class QuestionApiTests {
 
   @Autowired QuestionRepository questions;
 
+  @Autowired QuestionProcessor processor;
+
   @Test
   void askSaveListDelete() throws Exception {
     Cookie me = signup();
@@ -106,6 +108,28 @@ class QuestionApiTests {
                     """))
         .andExpect(status().isTooManyRequests())
         .andExpect(jsonPath("$.code").value("RATE_LIMIT_EXCEEDED"));
+  }
+
+  @Test
+  void workerShutdownReleasesUnfinishedQuestion() throws Exception {
+    Cookie me = signup();
+    long userId =
+        JsonPath.<Integer>read(
+            mvc.perform(get("/api/auth/me").cookie(me))
+                .andReturn()
+                .getResponse()
+                .getContentAsString(),
+            "$.userId");
+    // 종료 중인 워커가 처리하다 만 질문
+    Question stuck = new Question(userId, "반도체 수출 전망 알려줘", Instant.now());
+    ReflectionTestUtils.setField(stuck, "status", Status.PROCESSING);
+    long id = questions.save(stuck).getQuestionId();
+
+    processor.release(id);
+
+    // PENDING으로 돌아가 대기열에 들어갔으니 (같은 프로세스의) 다른 워커가 끝낸다
+    String done = waitUntilFinished(me, id);
+    assertThat(JsonPath.<String>read(done, "$.status")).isEqualTo("COMPLETED");
   }
 
   @Test
