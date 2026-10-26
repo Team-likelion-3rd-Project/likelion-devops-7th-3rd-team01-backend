@@ -1,0 +1,9 @@
+# 테스트 전용: 로컬·CI의 compose MySQL(3307)·Redis에 붙는다 (main의 application.yml보다 우선)
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3307/newsbrief
+    username: newsbrief
+    password: newsbrief
+  data:
+    redis:
+      host: localhost

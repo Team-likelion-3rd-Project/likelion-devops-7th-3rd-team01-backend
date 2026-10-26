@@ -1,0 +1,54 @@
+# 설정은 환경 변수로 넣는다 (docs/env.md). DB·Redis 주소는 코드에 기본값을 두지 않는다:
+# 빠뜨리면 엉뚱한 곳(localhost)에 붙지 않고 시작할 때 바로 실패한다.
+# 로컬: docker compose(--profile app)가 넣어 준다. 테스트: src/test/resources/config/application.yml
+server:
+  # 종료 신호를 받으면 새 요청은 받지 않고 처리 중인 요청만 끝낸 뒤 내려간다 (장애 시나리오 B10, M5-9)
+  shutdown: graceful
+
+spring:
+  application:
+    name: newsbrief
+  lifecycle:
+    # 처리 중인 요청을 기다리는 최대 시간. preStop 대기(10초) + 이 값이 terminationGracePeriodSeconds(api 30초)보다 짧아야 한다
+    timeout-per-shutdown-phase: 15s
+  autoconfigure:
+    # 로그인은 JWT 쿠키로만 한다. 기본 계정·임시 비밀번호를 만들지 않게 끈다
+    exclude: org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration
+  datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate.jdbc.time_zone: UTC
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST}
+      # Redis가 죽었을 때 요청이 오래 묶이지 않게 짧게 둔다 (장애 시나리오 B1)
+      connect-timeout: 1s
+      timeout: 3s
+
+# GET /actuator/info에 배포된 커밋을 보여 준다 (Dockerfile의 GIT_SHA)
+info:
+  commit: ${GIT_SHA:local}
+
+management:
+  info:
+    env:
+      enabled: true
+  endpoints:
+    web:
+      exposure:
+        # prometheus: 질문 대기열·FAILED 수·배치 소요 시간 (M5-10). 인그레스는 /api만 열어 밖에서는 안 보인다
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      group:
+        # Redis는 넣지 않는다. Redis가 죽어도 DB로 서비스가 계속되어야 한다
+        readiness:
+          include: readinessState,db

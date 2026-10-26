@@ -1,0 +1,63 @@
+# 로컬 개발: docker compose up -d                → MySQL·Redis만 (앱은 IDE나 bootRun으로)
+# 앱까지 컨테이너로: docker compose --profile app up -d --build
+#   → MySQL·Redis + 앱(api+worker) + 요약 배치 1회
+#   요약 다시 만들기: docker compose run --rm batch
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: newsbrief
+      MYSQL_USER: newsbrief
+      MYSQL_PASSWORD: newsbrief
+      MYSQL_ROOT_PASSWORD: root
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    ports:
+      - "3307:3306"  # PC에 설치된 MySQL(3306)과 겹치지 않게
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-unewsbrief", "-pnewsbrief", "--silent"]
+      interval: 3s
+      retries: 20
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+  app:
+    profiles: [app]
+    image: newsbrief-backend
+    build: .
+    environment: &app-env
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/newsbrief
+      SPRING_DATASOURCE_USERNAME: newsbrief
+      SPRING_DATASOURCE_PASSWORD: newsbrief  # 로컬 전용 값
+      SPRING_DATA_REDIS_HOST: redis
+      COOKIE_SECURE: "false"  # http로 접속하므로
+      JWT_SECRET: ${JWT_SECRET:-}  # 비우면 재시작할 때마다 로그인이 풀린다
+      AI_MODE: ${AI_MODE:-mock}
+      AI_MOCK_DELAY: ${AI_MOCK_DELAY:-0s}  # mock 응답 지연 (예: 3s)
+      # AI_MODE=bedrock일 때만 쓴다. 키는 .env에만 둔다 (커밋 금지)
+      AWS_REGION: ${AWS_REGION:-ap-northeast-2}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      BEDROCK_MODEL_ID: ${BEDROCK_MODEL_ID:-}
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+  batch:
+    profiles: [app]
+    image: newsbrief-backend
+    environment:
+      <<: *app-env
+      APP_ROLE: batch
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+volumes:
+  mysql-data:
