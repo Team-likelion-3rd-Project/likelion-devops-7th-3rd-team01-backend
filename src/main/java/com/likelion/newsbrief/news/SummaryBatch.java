@@ -56,6 +56,10 @@ public class SummaryBatch {
     for (Category category : Category.collectOrder()) {
       try {
         int saved = collector.collect(category);
+        if (saved == 0 && hasCurrentSummary(category)) {
+          log.info("{}: 새 기사 0건, 직전 요약 유지 (AI 호출 안 함)", category);
+          continue;
+        }
         int made = summarize(category, now);
         log.info("{}: 새 기사 {}건, 이슈 {}건", category, saved, made);
       } catch (Exception e) {
@@ -88,6 +92,17 @@ public class SummaryBatch {
     } catch (Exception e) {
       log.warn("배치 실행 기록 저장 실패: {}", e.toString());
     }
+  }
+
+  /**
+   * 새 기사가 없으면 다시 요약해도 같은 내용이라 실제 AI 비용만 든다. 다만 요약이 아직 없거나 AI 모드가 바뀌었으면(mock 요약이 남은 채 bedrock으로
+   * 전환 등) 다시 만든다.
+   */
+  // ponytail: 직전 배치에서 요약이 실패했거나 48시간 창에서 기사가 빠지기만 한 경우는 다음 새 기사가 들어올 때까지 갱신되지 않는다.
+  // 문제가 되면 마지막 요약에 쓴 기사 목록을 저장해 비교한다
+  private boolean hasCurrentSummary(Category category) {
+    List<NewsIssue> latest = issues.findLatest(category);
+    return !latest.isEmpty() && latest.get(0).isMock() == ai.isMock();
   }
 
   private int summarize(Category category, Instant now) {
