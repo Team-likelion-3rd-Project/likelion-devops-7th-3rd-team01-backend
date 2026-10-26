@@ -1,6 +1,8 @@
 package com.likelion.newsbrief.question;
 
 import java.time.Duration;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -20,12 +22,16 @@ import org.springframework.stereotype.Component;
 class QuestionWorker implements SmartLifecycle {
 
   private static final Duration POLL = Duration.ofSeconds(1);
+  // 워커 terminationGracePeriodSeconds(60초)보다 짧게. 평소 답변은 10초 안에 끝난다
+  private static final Duration STOP_WAIT = Duration.ofSeconds(40);
 
   private static final Logger log = LoggerFactory.getLogger(QuestionWorker.class);
 
   private final QuestionQueue queue;
   private final QuestionProcessor processor;
   private final int threads;
+
+  private final Set<Long> inFlight = ConcurrentHashMap.newKeySet();
 
   private volatile boolean running;
   private ExecutorService executor;
@@ -52,7 +58,12 @@ class QuestionWorker implements SmartLifecycle {
       try {
         Long id = queue.pop(POLL);
         if (id != null) {
-          processor.process(id);
+          inFlight.add(id);
+          try {
+            processor.process(id);
+          } finally {
+            inFlight.remove(id);
+          }
         }
       } catch (Exception e) {
         // Redis 장애 등. 잠시 쉬고 다시 시도한다
@@ -75,7 +86,15 @@ class QuestionWorker implements SmartLifecycle {
     running = false;
     executor.shutdown();
     try {
-      executor.awaitTermination(30, TimeUnit.SECONDS);
+      if (!executor.awaitTermination(STOP_WAIT.toSeconds(), TimeUnit.SECONDS)) {
+        // 기다려도 안 끝난 질문(AI 응답이 느림)은 PENDING으로 돌려 다른 워커가 처리하게 한다.
+        // 그냥 죽으면 PROCESSING으로 남아 60초 뒤 FAILED가 된다
+        inFlight.forEach(processor::release);
+        log.warn(
+            "종료 대기 {}초 초과, 처리 중이던 질문 {}건을 대기열로 돌려놓았습니다.",
+            STOP_WAIT.toSeconds(),
+            inFlight.size());
+      }
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
     }

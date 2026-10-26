@@ -5,6 +5,8 @@ import com.likelion.newsbrief.news.NewsArticle;
 import com.likelion.newsbrief.news.NewsArticleRepository;
 import com.likelion.newsbrief.news.Source;
 import com.likelion.newsbrief.question.Question.Status;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Instant;
 import java.util.List;
 import org.slf4j.Logger;
@@ -26,11 +28,22 @@ class QuestionProcessor {
   private final QuestionRepository questions;
   private final NewsArticleRepository articles;
   private final AiClient ai;
+  private final QuestionQueue queue;
+  private final Counter failed;
 
-  QuestionProcessor(QuestionRepository questions, NewsArticleRepository articles, AiClient ai) {
+  QuestionProcessor(
+      QuestionRepository questions,
+      NewsArticleRepository articles,
+      AiClient ai,
+      QuestionQueue queue,
+      MeterRegistry meters) {
     this.questions = questions;
     this.articles = articles;
     this.ai = ai;
+    this.queue = queue;
+    // 타임아웃으로 실패한 것은 QuestionSweeper가 reason=timeout으로 센다
+    this.failed =
+        Counter.builder("newsbrief.questions.failed").tag("reason", "error").register(meters);
   }
 
   void process(long id) {
@@ -57,6 +70,17 @@ class QuestionProcessor {
     } catch (Exception e) {
       log.error("질문 {} 처리 실패", id, e);
       questions.finish(id, Status.PROCESSING, Status.FAILED, null, null, Instant.now());
+      failed.increment();
+    }
+  }
+
+  /**
+   * 워커가 종료되면서 끝내지 못한 질문을 PENDING으로 돌려 대기열에 다시 넣는다. 다른 워커가 이미 끝냈으면 아무것도 안 한다. Redis에 못 넣어도 30초
+   * 뒤 QuestionSweeper가 다시 넣는다
+   */
+  void release(long id) {
+    if (questions.claim(id, Status.PROCESSING, Status.PENDING, Instant.now()) > 0) {
+      queue.push(id);
     }
   }
 }
