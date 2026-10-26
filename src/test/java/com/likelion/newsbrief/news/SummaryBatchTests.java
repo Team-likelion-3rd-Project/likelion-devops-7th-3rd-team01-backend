@@ -1,0 +1,82 @@
+package com.likelion.newsbrief.news;
+
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.List;
+import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+import org.springframework.transaction.annotation.Transactional;
+
+// ponytail: 로컬 compose(MySQL·Redis)가 떠 있어야 통과한다
+// 새 기사가 없으면 실제 AI를 다시 부르지 않는다 (AWS에서 bedrock을 켜 둔 채 30분마다 같은 요약을 만들던 비용)
+@SpringBootTest
+@Transactional
+class SummaryBatchTests {
+
+  @Autowired SummaryBatch batch;
+
+  @Autowired NewsIssueRepository issues;
+
+  @Autowired NewsArticleRepository articles;
+
+  // RSS를 실제로 읽지 않는다. 기본값 0 = 모든 분야 새 기사 없음
+  @MockitoBean RssCollector collector;
+
+  @MockitoSpyBean AiClient ai;
+
+  @BeforeEach
+  void recentArticle() {
+    // 요약할 기사가 있어야 AI를 부르는 경로까지 간다
+    articles.save(
+        new NewsArticle(
+            Category.AI,
+            "제목",
+            "설명",
+            "전자신문",
+            "https://x.com/" + UUID.randomUUID(),
+            Instant.now()));
+  }
+
+  @Test
+  void noNewArticlesKeepsCurrentSummary() {
+    saveLatestIssue(true); // 테스트는 AI_MODE=mock
+
+    batch.run();
+
+    verify(ai, never()).summarize(eq(Category.AI), anyList(), anyInt());
+  }
+
+  @Test
+  void aiModeChangedResummarizesEvenWithoutNewArticles() {
+    saveLatestIssue(false); // bedrock으로 만든 요약이 남은 채 mock으로 바뀜
+
+    batch.run();
+
+    verify(ai).summarize(eq(Category.AI), anyList(), anyInt());
+  }
+
+  private void saveLatestIssue(boolean mock) {
+    issues.saveAndFlush(
+        new NewsIssue(
+            Category.AI,
+            Instant.now().plus(1, ChronoUnit.DAYS),
+            1,
+            "직전 이슈",
+            "요약",
+            List.of("핵심"),
+            List.of(),
+            List.of(),
+            mock));
+  }
+}
