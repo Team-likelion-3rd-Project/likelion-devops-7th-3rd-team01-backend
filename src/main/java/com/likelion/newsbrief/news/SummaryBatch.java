@@ -56,7 +56,7 @@ public class SummaryBatch {
     for (Category category : Category.collectOrder()) {
       try {
         int saved = collector.collect(category);
-        if (saved == 0 && hasCurrentSummary(category)) {
+        if (hasCurrentSummary(category)) {
           log.info("{}: 새 기사 0건, 직전 요약 유지 (AI 호출 안 함)", category);
           continue;
         }
@@ -95,14 +95,16 @@ public class SummaryBatch {
   }
 
   /**
-   * 새 기사가 없으면 다시 요약해도 같은 내용이라 실제 AI 비용만 든다. 다만 요약이 아직 없거나 AI 모드가 바뀌었으면(mock 요약이 남은 채 bedrock으로
-   * 전환 등) 다시 만든다.
+   * 마지막 요약 뒤에 들어온 기사가 없으면 다시 요약해도 같은 내용이라 실제 AI 비용만 든다. 이번 회차의 새 기사 수가 아니라 마지막 요약과 비교해서, 요약
+   * 도중 AI 실패나 Pod 삭제로 끝난 회차의 기사도 다음 배치가 다시 요약한다 (장애 시험 B3·B9). 요약이 아직 없거나 AI 모드가 바뀌었으면(mock 요약이
+   * 남은 채 bedrock으로 전환 등) 다시 만든다.
    */
-  // ponytail: 직전 배치에서 요약이 실패했거나 48시간 창에서 기사가 빠지기만 한 경우는 다음 새 기사가 들어올 때까지 갱신되지 않는다.
-  // 문제가 되면 마지막 요약에 쓴 기사 목록을 저장해 비교한다
+  // ponytail: 48시간 창에서 기사가 빠지기만 한 경우는 다음 새 기사가 들어올 때까지 갱신되지 않는다
   private boolean hasCurrentSummary(Category category) {
     List<NewsIssue> latest = issues.findLatest(category);
-    return !latest.isEmpty() && latest.get(0).isMock() == ai.isMock();
+    return !latest.isEmpty()
+        && latest.get(0).isMock() == ai.isMock()
+        && articles.countCollectedAfterLatestSummary(category.name()) == 0;
   }
 
   private int summarize(Category category, Instant now) {
