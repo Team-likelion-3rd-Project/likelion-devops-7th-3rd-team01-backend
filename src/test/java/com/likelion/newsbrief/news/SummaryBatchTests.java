@@ -14,6 +14,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,6 +30,8 @@ class SummaryBatchTests {
   @Autowired NewsIssueRepository issues;
 
   @Autowired NewsArticleRepository articles;
+
+  @Autowired JdbcTemplate jdbc;
 
   // RSS를 실제로 읽지 않는다. 기본값 0 = 모든 분야 새 기사 없음
   @MockitoBean RssCollector collector;
@@ -60,6 +63,17 @@ class SummaryBatchTests {
   @Test
   void aiModeChangedResummarizesEvenWithoutNewArticles() {
     saveLatestIssue(false); // bedrock으로 만든 요약이 남은 채 mock으로 바뀜
+
+    batch.run();
+
+    verify(ai).summarize(eq(Category.AI), anyList(), anyInt());
+  }
+
+  @Test
+  void articleCollectedAfterLastSummaryIsSummarizedOnRetry() {
+    // 직전 회차가 기사만 저장하고 요약 전에 죽음 (B9): 이번 회차의 새 기사는 0건이지만 요약은 기사보다 오래됐다
+    saveLatestIssue(true);
+    jdbc.update("update news_issues set created_at = created_at - interval 1 day");
 
     batch.run();
 

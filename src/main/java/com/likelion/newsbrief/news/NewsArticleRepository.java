@@ -32,6 +32,17 @@ public interface NewsArticleRepository extends JpaRepository<NewsArticle, Long> 
       nativeQuery = true)
   List<NewsArticle> search(String query, double minScore, int limit);
 
+  /** 그 분야의 마지막 요약을 저장한 뒤에 수집한 기사 수. 두 시각 모두 DB 기본값이라 앱·DB 시계 차이와 무관하다 */
+  @Query(
+      value =
+          """
+          select count(*) from news_articles a
+          where a.category = :category
+            and a.collected_at > (select max(i.created_at) from news_issues i where i.category = :category)\
+          """,
+      nativeQuery = true)
+  long countCollectedAfterLatestSummary(String category);
+
   @Transactional
   @Modifying
   @Query(value = "delete from news_articles where collected_at < :before", nativeQuery = true)
