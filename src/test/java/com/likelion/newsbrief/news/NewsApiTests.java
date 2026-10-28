@@ -1,6 +1,7 @@
 package com.likelion.newsbrief.news;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -39,6 +40,11 @@ class NewsApiTests {
   @AfterEach
   void clearCacheAfter() {
     cache.evictAll();
+  }
+
+  @Test
+  void responseCarriesAppVersion() throws Exception {
+    mvc.perform(get("/api/news/home")).andExpect(header().string("X-App-Version", "local"));
   }
 
   @Test

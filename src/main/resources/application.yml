@@ -18,6 +18,9 @@ spring:
     url: ${SPRING_DATASOURCE_URL}
     username: ${SPRING_DATASOURCE_USERNAME}
     password: ${SPRING_DATASOURCE_PASSWORD}
+    hikari:
+      # 기본 10이면 api·worker·batch 파드가 늘 때 RDS db.t3.micro 연결 한도를 넘는다 (EKS 전환 중 배치 Too many connections)
+      maximum-pool-size: 5
   jpa:
     open-in-view: false
     hibernate:
