@@ -1,5 +1,6 @@
 package com.likelion.newsbrief.news;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
@@ -58,6 +59,9 @@ class SummaryBatchTests {
     batch.run();
 
     verify(ai, never()).summarize(eq(Category.AI), anyList(), anyInt());
+    // 건너뛴 분야도 generatedAt이 이번 배치 시각이 되어 홈에 갱신 지연이 뜨지 않는다 (직전 값은 하루 뒤)
+    assertThat(issues.findLatest(Category.AI).get(0).getGeneratedAt())
+        .isBefore(Instant.now().plus(1, ChronoUnit.HOURS));
   }
 
   @Test
@@ -84,7 +88,8 @@ class SummaryBatchTests {
     issues.saveAndFlush(
         new NewsIssue(
             Category.AI,
-            Instant.now().plus(1, ChronoUnit.DAYS),
+            // DB(DATETIME)는 초 단위라, 같은 트랜잭션에서 비교할 값도 초로 맞춘다
+            Instant.now().plus(1, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS),
             1,
             "직전 이슈",
             "요약",
