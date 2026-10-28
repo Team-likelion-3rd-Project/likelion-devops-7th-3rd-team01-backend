@@ -56,7 +56,9 @@ public class SummaryBatch {
     for (Category category : Category.collectOrder()) {
       try {
         int saved = collector.collect(category);
-        if (hasCurrentSummary(category)) {
+        List<NewsIssue> latest = issues.findLatest(category);
+        if (isCurrent(latest, category)) {
+          issues.markChecked(category, latest.get(0).getGeneratedAt(), now);
           log.info("{}: 새 기사 0건, 직전 요약 유지 (AI 호출 안 함)", category);
           continue;
         }
@@ -100,8 +102,7 @@ public class SummaryBatch {
    * 남은 채 bedrock으로 전환 등) 다시 만든다.
    */
   // ponytail: 48시간 창에서 기사가 빠지기만 한 경우는 다음 새 기사가 들어올 때까지 갱신되지 않는다
-  private boolean hasCurrentSummary(Category category) {
-    List<NewsIssue> latest = issues.findLatest(category);
+  private boolean isCurrent(List<NewsIssue> latest, Category category) {
     return !latest.isEmpty()
         && latest.get(0).isMock() == ai.isMock()
         && articles.countCollectedAfterLatestSummary(category.name()) == 0;
