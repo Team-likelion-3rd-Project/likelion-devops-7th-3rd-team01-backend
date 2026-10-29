@@ -177,9 +177,17 @@ public class AiClient {
         .toList();
   }
 
+  // 모델이 가끔 한글 단어 사이에 한자·일본어 글자를 섞는다 (운영 시험 10/29: "予定", "进행"). 지시문으로도 다 막히지 않는다
+  private static final Pattern FOREIGN_SCRIPT =
+      Pattern.compile("[\\p{IsHan}\\p{IsHiragana}\\p{IsKatakana}]");
+
   private Answer bedrockAnswer(String query, List<NewsArticle> articles) {
     String user = "질문: %s\n\n기사 목록\n%s".formatted(query, numbered(articles));
     AnswerOut out = parse(converse(ANSWER_PROMPT, user, ANSWER_MAX_TOKENS), AnswerOut.class);
+    // ponytail: 한 번만 다시 묻는다. 기사 제목의 한자(韓 등)를 인용한 답이면 다시 물어도 남고, 그대로 보낸다
+    if (out.answer() != null && FOREIGN_SCRIPT.matcher(out.answer()).find()) {
+      out = parse(converse(ANSWER_PROMPT, user, ANSWER_MAX_TOKENS), AnswerOut.class);
+    }
     // 거절할 때 모델이 answer를 비우는 경우가 있다 (Playground 시험에서 확인). 거절은 정상 결과라 안내 문구를 채운다
     if (out.rejected() && (out.answer() == null || out.answer().isBlank())) {
       return new Answer(true, REJECT_TEXT, List.of());
