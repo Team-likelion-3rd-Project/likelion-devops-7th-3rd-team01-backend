@@ -97,6 +97,24 @@ class AiClientBedrockTests {
   }
 
   @Test
+  void answerWithHanCharactersIsAskedAgainOnce() {
+    Stub stub =
+        new Stub(
+            """
+            {"rejected":false,"answer":"데이터센터 수요가 进행 중이에요.","sources":[1]}\
+            """,
+            """
+            {"rejected":false,"answer":"데이터센터 수요가 늘고 있어요.","sources":[1]}\
+            """);
+
+    AiClient.Answer answer =
+        new AiClient("bedrock", MODEL, stub).answer("데이터센터 소식 있어?", articles);
+
+    assertThat(answer.text()).isEqualTo("데이터센터 수요가 늘고 있어요.");
+    assertThat(stub.requests).hasSize(2);
+  }
+
+  @Test
   void rejectedAnswerHasNoSources() {
     Stub stub =
         new Stub(
@@ -166,15 +184,17 @@ class AiClientBedrockTests {
   private static class Stub implements BedrockRuntimeClient {
 
     final List<ConverseRequest> requests = new ArrayList<>();
-    private final String reply;
+    private final String[] replies;
 
-    Stub(String reply) {
-      this.reply = reply;
+    /** 부를 때마다 다음 글을 돌려준다. 다 쓰면 마지막 글을 반복한다 */
+    Stub(String... replies) {
+      this.replies = replies;
     }
 
     @Override
     public ConverseResponse converse(ConverseRequest request) {
       requests.add(request);
+      String reply = replies[Math.min(requests.size(), replies.length) - 1];
       return ConverseResponse.builder()
           .output(
               ConverseOutput.fromMessage(
