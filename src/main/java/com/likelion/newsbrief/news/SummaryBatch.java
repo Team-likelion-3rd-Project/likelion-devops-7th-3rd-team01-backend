@@ -10,7 +10,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
-/** 30분마다 CronJob(APP_ROLE=batch)으로 한 번 실행: 분야별 RSS 수집 → 요약 → DB 저장 → 캐시 비우기 */
+/** 30분마다 CronJob(APP_ROLE=batch)으로 한 번 실행: 분야별 RSS 수집 → 요약 → DB 저장 → 캐시 덮어쓰기 */
 @Component
 public class SummaryBatch {
 
@@ -27,7 +27,8 @@ public class SummaryBatch {
   private final AiClient ai;
   private final NewsArticleRepository articles;
   private final NewsIssueRepository issues;
-  private final NewsCache cache;
+  // 캐시에 넣을 응답 모양을 컨트롤러가 갖고 있어 그대로 쓴다. batch에도 컨트롤러 빈은 만들어진다 (웹 서버만 없음)
+  private final NewsController news;
   private final StringRedisTemplate redis;
 
   SummaryBatch(
@@ -35,13 +36,13 @@ public class SummaryBatch {
       AiClient ai,
       NewsArticleRepository articles,
       NewsIssueRepository issues,
-      NewsCache cache,
+      NewsController news,
       StringRedisTemplate redis) {
     this.collector = collector;
     this.ai = ai;
     this.articles = articles;
     this.issues = issues;
-    this.cache = cache;
+    this.news = news;
     this.redis = redis;
   }
 
@@ -71,8 +72,8 @@ public class SummaryBatch {
     }
     articles.deleteCollectedBefore(now.minus(RETENTION));
     issues.deleteGeneratedBefore(now.minus(RETENTION));
-    // 새 요약이 DB에 들어갔으니 캐시를 비운다. 다음 조회가 DB에서 새 요약을 읽어 다시 캐시한다
-    cache.evictAll();
+    // 새 요약이 DB에 들어갔으니 캐시를 새 응답으로 덮어쓴다
+    news.refreshCache();
     recordLastRun(Duration.between(now, Instant.now()), failed);
     return failed;
   }
