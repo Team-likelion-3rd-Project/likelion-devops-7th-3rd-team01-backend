@@ -15,6 +15,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
@@ -33,6 +34,10 @@ class SummaryBatchTests {
   @Autowired NewsArticleRepository articles;
 
   @Autowired JdbcTemplate jdbc;
+
+  @Autowired NewsCache cache;
+
+  @Autowired StringRedisTemplate redis;
 
   // RSS를 실제로 읽지 않는다. 기본값 0 = 모든 분야 새 기사 없음
   @MockitoBean RssCollector collector;
@@ -82,6 +87,18 @@ class SummaryBatchTests {
     batch.run();
 
     verify(ai).summarize(eq(Category.AI), anyList(), anyInt());
+  }
+
+  @Test
+  void batchFillsCacheInsteadOfEmptyingIt() {
+    // 배치가 끝난 순간 캐시가 비어 있으면 모든 조회가 DB로 몰린다 (HPA 스파이크 시험 10/29)
+    cache.evictAll();
+
+    batch.run();
+
+    assertThat(redis.hasKey(NewsCache.homeKey())).isTrue();
+    assertThat(redis.hasKey(NewsCache.categoryKey(Category.AI))).isTrue();
+    cache.evictAll(); // 되돌린 테스트 데이터가 캐시에 남지 않게
   }
 
   private void saveLatestIssue(boolean mock) {

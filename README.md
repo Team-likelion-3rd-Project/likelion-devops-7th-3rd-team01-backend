@@ -3,7 +3,7 @@
 IT 뉴스(전자신문 RSS 6개 분야)를 AI가 이슈별로 요약해 보여 주고, 수집한 기사를 근거로 질문에 답하는 서비스의 백엔드입니다.
 
 - 프로젝트 소개·위키·이슈: [likelion-devops-7th-3rd-team01](https://github.com/Team-likelion-3rd-Project/likelion-devops-7th-3rd-team01)
-- 배포(Kubernetes 매니페스트, Terraform): [likelion-devops-7th-3rd-team01-infra](https://github.com/Team-likelion-3rd-Project/likelion-devops-7th-3rd-team01-infra)
+- 배포(Helm 차트, Argo CD, Terraform): [likelion-devops-7th-3rd-team01-infra](https://github.com/Team-likelion-3rd-Project/likelion-devops-7th-3rd-team01-infra)
 - API 명세·ERD·환경 변수·성능 테스트·장애 시나리오: 위키
 
 ## 기술 구성
@@ -12,7 +12,7 @@ IT 뉴스(전자신문 RSS 6개 분야)를 AI가 이슈별로 요약해 보여 �
 |---|---|
 | 런타임 | Java 21, Spring Boot 4.1 |
 | 저장소 | MySQL 8.4 (Flyway로 스키마 자동 적용), Redis 7 (요약 캐시·질문 대기열) |
-| AI | AWS Bedrock Claude Haiku 5.5. 평소·테스트는 mock (`AI_MODE`) |
+| AI | AWS Bedrock Claude Haiku 5.5. 평소·테스트는 mock (`AI_MODE`). EKS는 앱 파드에만 권한을 주는 Pod Identity로 키 없이 호출 |
 | 인증 | JWT를 httpOnly 쿠키 `ACCESS_TOKEN`에 저장 |
 | 이미지 | Docker 멀티 스테이지, GHCR에 커밋 SHA 태그 |
 
@@ -30,7 +30,8 @@ IT 뉴스(전자신문 RSS 6개 분야)를 AI가 이슈별로 요약해 보여 �
 ```
 질문:  POST /api/questions → DB에 PENDING 저장 → Redis 대기열 → worker → COMPLETED / REJECTED / FAILED
        (화면은 2초마다 GET /api/questions/{id}로 확인, 60초 넘으면 FAILED, 하루 10회)
-요약:  batch(30분) → 분야별 RSS 수집 → 새 기사가 있으면 AI 요약 → news_issues 저장 → Redis 캐시 비우기
+요약:  batch(30분) → 분야별 RSS 수집 → 마지막 요약 뒤 새 기사가 있으면 AI 요약 → news_issues 저장 → Redis 캐시 비우기
+       (새 기사가 없으면 AI를 부르지 않고 generatedAt만 이번 배치 시각으로 바꿈. 실패한 분야는 그대로라 화면에 갱신 지연이 뜸)
 조회:  GET /api/news/home, /api/news/categories/{category} → Redis 캐시 (없으면 DB)
 ```
 
@@ -84,7 +85,8 @@ docker compose up -d   # 테스트도 로컬 MySQL·Redis를 씁니다
 | 항목 | 내용 |
 |---|---|
 | 헬스체크 | `/actuator/health/liveness`, `/actuator/health/readiness` (readiness는 DB만 봄, 예열이 끝난 뒤 UP) |
-| 배포 버전 | `/actuator/info`의 `commit` |
+| 배포 버전 | 모든 응답 헤더 `X-App-Version`, `/actuator/info`의 `commit` (둘 다 커밋 SHA) |
+| DB 연결 | 파드당 최대 5개 (RDS db.t3.micro 연결 한도) |
 | 지표 | `/actuator/prometheus`: `newsbrief_questions_queue_length`, `newsbrief_questions_failed_total`, `newsbrief_batch_last_duration_seconds` 등. 인그레스는 `/api`만 열어 밖에서는 보이지 않습니다 |
 | 종료 | graceful shutdown (처리 중 요청 최대 15초). worker는 처리 중 질문을 40초 기다리고, 못 끝내면 대기열로 돌려놓습니다 |
 
@@ -92,9 +94,13 @@ docker compose up -d   # 테스트도 로컬 MySQL·Redis를 씁니다
 
 ```
 feature/* → develop PR (승인 1명, squash merge)
-develop push → 테스트 → GHCR 이미지 → infra deploy-onprem → 온프렘 배포
-main push    → 테스트 → GHCR 이미지 → infra deploy-aws    → AWS 배포
+develop push → 테스트 → GHCR 이미지 → infra deploy-onprem → deploy/onprem 브랜치에 태그 커밋 → 온프렘 Argo CD 반영
+main push    → 테스트 → GHCR 이미지 → infra deploy-aws    → deploy/aws 브랜치에 태그 커밋    → EKS Argo CD 반영
 ```
+
+- 배포 workflow는 클러스터를 직접 바꾸지 않습니다. 앱은 infra의 Helm 차트(`charts/newsbrief`)로 배포되고, Argo CD가 3분 안에 반영합니다.
+- Argo CD가 Git 상태로 되돌리므로 `kubectl`로 바꾼 설정(ConfigMap, replicas)은 곧 원래대로 돌아갑니다. 장애 시험처럼 잠깐 바꿔야 하면 인프라 담당에게 자동 복구를 꺼 달라고 합니다.
+- 수동 재배포·롤백: infra Actions → deploy-onprem / deploy-aws → Run workflow (SHA 입력)
 
 `main`·`develop`에는 직접 push하지 않습니다.
 
