@@ -14,13 +14,14 @@ import org.springframework.data.redis.serializer.RedisSerializer;
 import org.springframework.stereotype.Component;
 
 /**
- * 홈·분야 응답을 Redis에 캐시한다 (캐시 우선, 없으면 DB). 요약은 30분마다 바뀌므로 TTL도 30분이고, 요약 배치가 끝나면 캐시를 비워 새 요약이 바로 보이게
- * 한다. Redis가 죽어도 예외를 내지 않고 DB에서 읽는다 (장애 시나리오 B1). MySQL이 데이터의 기준이다.
+ * 홈·분야 응답을 Redis에 캐시한다 (캐시 우선, 없으면 DB). 요약 배치가 끝나면 새 요약으로 캐시를 덮어써 바로 보이게 한다. TTL은 배치 주기(30분)보다
+ * 길게 둬서 평소에는 만료되지 않는다. Redis가 죽어도 예외를 내지 않고 DB에서 읽는다 (장애 시나리오 B1). MySQL이 데이터의 기준이다.
  */
 @Component
 public class NewsCache {
 
-  static final Duration TTL = Duration.ofMinutes(30);
+  // 배치가 30분마다 덮어쓴다. 덮어쓰기에 한 번 실패해도 1시간 뒤에는 DB에서 다시 읽는다
+  static final Duration TTL = Duration.ofHours(1);
 
   // 응답 모양이 바뀌면 v2로 올려 옛 캐시를 무시한다
   private static final String PREFIX = "news:v2:";
@@ -59,15 +60,19 @@ public class NewsCache {
       log.warn("뉴스 캐시 읽기 실패, DB에서 읽습니다: {}", e.toString());
     }
     T value = loader.get();
+    put(key, value);
+    return value;
+  }
+
+  void put(String key, Serializable value) {
     try {
       redis.opsForValue().set(key, value, TTL);
     } catch (Exception e) {
       log.warn("뉴스 캐시 저장 실패: {}", e.toString());
     }
-    return value;
   }
 
-  /** 요약 배치가 끝난 뒤 호출한다. 실패해도 TTL(30분)이 지나면 새 요약이 보인다 */
+  /** 테스트용. 운영에서는 지우지 않고 덮어쓴다 (NewsController.refreshCache) */
   public void evictAll() {
     List<String> keys = new ArrayList<>();
     keys.add(homeKey());

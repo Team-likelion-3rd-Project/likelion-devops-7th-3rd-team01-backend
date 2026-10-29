@@ -67,6 +67,17 @@ class NewsController {
     return cache.get(NewsCache.categoryKey(c), () -> loadCategory(c));
   }
 
+  /**
+   * 요약 배치가 끝나면 부른다. 캐시를 지우지 않고 새 응답으로 덮어쓴다. 지우면 그 순간 모든 조회가 DB로 몰려 연결 풀이 차고 readiness가 실패한다
+   * (HPA 스파이크 시험 10/29: api 4개가 동시에 빠져 503 3.3%)
+   */
+  void refreshCache() {
+    cache.put(NewsCache.homeKey(), loadHome());
+    for (Category c : Category.values()) {
+      cache.put(NewsCache.categoryKey(c), loadCategory(c));
+    }
+  }
+
   private HomeResponse loadHome() {
     List<NewsIssue> latest = issues.findLatest();
     Map<Category, List<NewsIssue>> byCategory =
